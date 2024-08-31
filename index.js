@@ -1,11 +1,15 @@
 const express = require('express');
 const requestIp = require('request-ip');
 const dns = require('dns');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 4001;
 
 app.use(requestIp.mw());
 app.set('view engine', 'ejs');
+app.get('/ho', (req, res) => {
+    res.render('index');
+});
 
 app.get('/', (req, res) => {
     const clientIp = req.connection.remoteAddress;
