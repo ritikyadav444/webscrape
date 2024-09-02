@@ -1,40 +1,44 @@
 const express = require('express');
-const requestIp = require('request-ip');
+const geoip = require('geoip-lite');
 const dns = require('dns');
-const path = require('path');
-const app = express();
-const PORT = process.env.PORT || 4001;
 
-app.use(requestIp.mw());
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'Views'));
-app.get('/ho', (req, res) => {
-    res.render('test');
-});
+const app = express();
+const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    const clientIp = req.connection.remoteAddress;
-    const normalizedIp = clientIp.startsWith('::ffff:') ? clientIp.split('::ffff:')[1] : clientIp;
+    const ip =
+        req.headers['cf-connecting-ip'] ||
+        req.headers['x-real-ip'] ||
+        (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0] : null) || req.socket.remoteAddress;
 
-    if (normalizedIp.startsWith('192.168.') || normalizedIp.startsWith('10.') || normalizedIp.startsWith('172.16.') || normalizedIp.startsWith('127.') || normalizedIp === '::1') {
-        const message = `Private or localhost IP detected: ${normalizedIp}`;
-        res.render('index', { hostname: null, message });
-        console.log(`Private or localhost IP: ${normalizedIp}`);
+    let responseText = '';
+    let hostnameResolved = false;
+    let geoResolved = false;
+
+    dns.reverse(ip, (err, hostnames) => {
+        if (err) {
+            responseText += 'Hostname not found. ';
+        } else {
+            responseText += `Client Hostname: ${hostnames[0]}. `;
+        }
+        hostnameResolved = true;
+        if (geoResolved) {
+            res.send(responseText);
+        }
+    });
+
+    const geo = geoip.lookup(ip);
+    if (!geo) {
+        responseText += 'Geolocation not found. ';
     } else {
-        dns.reverse(normalizedIp, (err, hostnames) => {
-            if (err) {
-                const message = `Could not resolve hostname for IP: ${normalizedIp}`;
-                res.render('index', { hostname: null, message });
-                console.log("DNS error:", err.message);
-            } else {
-                const hostname = hostnames[0];
-                res.render('index', { hostname, message: null });
-                console.log("Resolved Hostnames:", hostnames);
-            }
-        });
+        responseText += `IP: ${ip}, Your location: ${geo.city}, Country: ${geo.country}, Region: ${geo.region}, Timezone: ${geo.timezone}, LL: ${geo.ll}, Range: ${geo.range}. `;
+    }
+    geoResolved = true;
+    if (hostnameResolved) {
+        res.send(responseText);
     }
 });
 
 const server = app.listen(PORT, () => {
-    console.log(`Server is working on http://192.168.1.151:${PORT}`);
+    console.log(`Server is running on http://192.168.1.151:${PORT}`);
 });
